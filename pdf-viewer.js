@@ -86,7 +86,9 @@ TEMPLATE.innerHTML = `
     -webkit-overflow-scrolling: touch;
     background: var(--bg);
     padding: 16px 0 32px;
+    cursor: grab;
   }
+  #viewport.dragging { cursor: grabbing; user-select: none; }
 
   #page-wrapper {
     display: flex;
@@ -181,7 +183,7 @@ TEMPLATE.innerHTML = `
 `;
 
 class PdfViewer extends HTMLElement {
-  static get observedAttributes() { return ['src']; }
+  static get observedAttributes() { return ['src', 'title']; }
 
   constructor() {
     super();
@@ -207,6 +209,7 @@ class PdfViewer extends HTMLElement {
 
   attributeChangedCallback(name, _old, val) {
     if (name === 'src' && this.isConnected) this._load(val);
+    if (name === 'title' && this._$('doc-title')) this._$('doc-title').textContent = val || 'Visor PDF';
   }
 
   /* ── PDF.js lazy import ── */
@@ -257,9 +260,9 @@ class PdfViewer extends HTMLElement {
       this._fitScale = this._computeFit(firstVp);
       this._scale    = this._fitScale;
 
-      // Extract title from filename
+      const attrTitle = this.getAttribute('title');
       const filename = url.split('/').pop().replace(/\.pdf$/i, '').replace(/[-_]/g, ' ');
-      this._$('doc-title').textContent = filename;
+      this._$('doc-title').textContent = attrTitle || filename || 'Visor PDF';
 
       this._$('status').style.display = 'none';
       this._$('page-wrapper').style.display = 'flex';
@@ -377,6 +380,20 @@ class PdfViewer extends HTMLElement {
         else        this._goTo(this._page - 1);
       }
     }, { passive: true });
+
+    // Mouse drag pan
+    let drag = false, mx = 0, my = 0, sl = 0, st = 0;
+    vp.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      drag = true; mx = e.clientX; my = e.clientY; sl = vp.scrollLeft; st = vp.scrollTop;
+      vp.classList.add('dragging');
+    });
+    window.addEventListener('mousemove', e => {
+      if (!drag) return;
+      vp.scrollLeft = sl - (e.clientX - mx);
+      vp.scrollTop  = st - (e.clientY - my);
+    });
+    window.addEventListener('mouseup', () => { drag = false; vp.classList.remove('dragging'); });
 
     // Resize
     new ResizeObserver(async () => {
